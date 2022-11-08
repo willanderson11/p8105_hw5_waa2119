@@ -2,7 +2,7 @@
 title: "p8105_hw5_waa2119"
 author: "William Anderson"
 date: "2022-11-07"
-output: html_document
+output: github_document
 ---
 
 
@@ -127,3 +127,82 @@ Create a plot that shows the estimates and CIs for each city – check out geom_
 
 
 ## Problem 3
+
+n this problem, you will conduct a simulation to explore power in a one-sample t-test.
+
+First set the following design elements:
+
+Fix n=30
+Fix σ=5
+Set μ=0. Generate 5000 datasets from the model
+
+x∼Normal[μ,σ]
+
+For each dataset, save μ^ and the p-value arising from a test of H:μ=0 using α=0.05. Hint: to obtain the estimate and p-value, use broom::tidy to clean the output of t.test.
+
+```{r}
+n = 30
+sigma = 5
+
+norm_dist = function(n, mu) {
+  norm_data = tibble(x = rnorm(n, mean = mu, sd = sigma))
+  
+  broom::tidy(t.test(norm_data, alternative = "two.sided", conf.level = 0.95))
+}
+
+t_test_results = 
+  expand_grid(
+    sample_size = n,
+    mu = 0:6,
+    iter = 1:300) %>%
+  mutate(
+    t_test = map2(.x = sample_size, .y = mu, ~norm_dist(n = .x, mu = .y))) %>%
+  unnest(t_test) %>%
+  view
+
+
+```
+
+Make a plot showing the proportion of times the null was rejected (the power of the test) on the y axis and the true value of μ on the x axis. Describe the association between effect size and power.
+
+```{r}
+t_test_results %>%
+  group_by(mu) %>%
+  filter(p.value < 0.05) %>%
+  summarize(proportion = n()) %>%
+  ggplot(aes(x = mu, y = proportion, color = mu, group = mu)) + geom_point() + labs(title = "Power vs different mean values", y = "Power value") + 
+  theme(legend.position = "none") + 
+  scale_x_continuous(breaks = 0:6)
+```
+
+When effect size increases, so does the power of the test as there is a strong relationship between the two variables then the probability of correctly rejecting the null hypothesis increases as there is an association between the variables. We see this is true from the graph as the effect size increases the power also increases. This makes sense as the difference in means is increasing with increasing mu which means there is more likely to be a true effect and a rejection of the null hypothesis, which means a higher power value. 
+
+Make a plot showing the average estimate of μ^ on the y axis and the true value of μ on the x axis. 
+
+```{r}
+t_test_results %>%
+  group_by(mu) %>%
+  summarize(mean_mu_hat = mean(estimate)) %>%
+  ggplot(aes(x = mu, y = mean_mu_hat, group = mu, color = mu)) + geom_point() + 
+  theme(legend.position = "none") + 
+  labs(title = "Estimated mu vs True mu", 
+       x = "True mu", y = "Estimated mu") + scale_x_continuous(breaks = 0:6) + 
+  scale_y_continuous(breaks = 0:6)
+
+  
+```
+
+Make a second plot (or overlay on the first) the average estimate of μ^ only in samples for which the null was rejected on the y axis and the true value of μ on the x axis. Is the sample average of μ^ across tests for which the null is rejected approximately equal to the true value of μ? Why or why not?
+
+```{r}
+t_test_results %>%
+  group_by(mu) %>%
+  filter(p.value < 0.05) %>%
+  summarize(mean_mu_hat = mean(estimate)) %>%
+    ggplot(aes(x = mu, y = mean_mu_hat, group = mu, color = mu)) + geom_point() + 
+  theme(legend.position = "none") + 
+  labs(title = "Estimated mu vs True mu when null is rejected", 
+       x = "True mu", y = "Estimated mu") + scale_x_continuous(breaks = 0:6)
+```
+
+The average estimate of mu_hat across tests for which the null is rejected is only approximately equal to the true value of mu when the effect size becomes large as we see in the graph that the estimate models the true mean for mu = 4, 5, and 6 which shows that the effect size needs to be large enough and thus the power of the test be large enough for the null to be rejected enough times so that the estimate accurately approximates the true mean. 
