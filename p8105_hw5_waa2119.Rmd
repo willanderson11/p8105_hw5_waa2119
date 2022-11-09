@@ -152,13 +152,13 @@ First we set the following design elements:
 
 Fix n=30
 Fix σ=5
-Set μ=0. 
+Set μ={0, 1, 2, 3, 4, 5, 6}
 
 Then we will generate 5000 datasets from the model with parameters:
 
 x∼Normal[μ,σ]
 
-For each dataset, we will save μ_hat and the p-value arising from a test of H:μ=0 using α=0.05. 
+For each dataset, we will save μ_hat and the p-value arising from a test of H0:μ=0 using α=0.05. 
 
 ```{r}
 
@@ -176,8 +176,10 @@ t_test_results =
   
   expand_grid(
     sample_size = n,
+    
     mu = 0:6,
-    iter = 1:300) %>%
+    
+    iter = 1:5000) %>%
   
   mutate(
     t_test = map2(.x = sample_size, .y = mu, ~t_dist(n = .x, mu = .y))) %>%
@@ -200,7 +202,7 @@ t_test_results %>%
   
   summarize(proportion = n()) %>%
   
-  ggplot(aes(x = mu, y = proportion, color = mu, group = mu)) +
+  ggplot(aes(x = mu, y = proportion/5000, color = mu, group = mu)) +
   
   geom_point() + 
   
@@ -211,12 +213,14 @@ t_test_results %>%
   
   theme(legend.position = "none") +
   
-  scale_x_continuous(breaks = 0:6)
+  scale_x_continuous(breaks = 0:6) + 
+  
+  scale_y_continuous(breaks = seq(0, 1, by = 0.10))
 ```
 
 When effect size increases, so does the power of the test as there is a strong relationship between the two variable which causes the probability of correctly rejecting the null hypothesis to increase as there is a likely association between the variables. 
 
-We see this is true from the graph as the magnitude of the difference between the mean and the null hypothesis increases, the power also increases. This makes sense since the null hypothesis is mu = 0 and the difference in means is increasing with increasing mu which means there is more likely to be a true difference and a rejection of the null hypothesis, which is equivalent to a higher power value. 
+We see this is true from the graph as the magnitude of the difference between the mean and the null hypothesis increases, the power also increases. This makes sense since the null hypothesis is mu = 0 and the difference in means is increasing with increasing mu which means there is more likely to be a true difference and a rejection of the null hypothesis, which is equivalent to a higher power value. We see that the power values become asymptomatic at 1 when the effect size becomes large enough, meaning that there is a near 100% probability of rejecting the null hypothesis. 
 
 Now we will make a plot showing the average estimate of μ_hat on the y axis and the true value of μ on the x axis. 
 
@@ -240,9 +244,9 @@ t_test_results %>%
        
        y = "Estimated mu") +
   
-  scale_x_continuous(breaks = 0:6) +
+  scale_x_continuous(breaks = 0:6) + 
   
-  scale_y_continuous(breaks = 0:6)
+  scale_y_continuous(breaks = -1:6)
   
 ```
 
@@ -270,9 +274,9 @@ t_test_results %>%
        
        y = "Estimated mu") +
   
-  scale_x_continuous(breaks = 0:6) +
+  scale_x_continuous(breaks = 0:6) + 
   
-  scale_y_continuous(breaks = 0:6)
+  scale_y_continuous(breaks = -1:6)
 ```
 
-The average estimate of mu_hat across tests for which the null is rejected is only approximately equal to the true value of mu when the effect size becomes large as we see in the graph that the estimate approximates the true mean for mu = 4, 5, and 6 which shows that the effect size needs to be large enough and thus the power of the test be large enough for the null to be accurately rejected so that the estimate accurately approximates the true mean. 
+Aside from the case when the true mean is zero and equal to the null, the average estimate of mu_hat across tests for which the null is rejected is only approximately equal to the true value of mu when the effect size becomes large as we see in the graph that the estimate approximates the true mean for mu = 4, 5, and 6 which shows that the effect size needs to be large enough and thus the power of the test be large enough for the null to be accurately rejected so that the estimate accurately approximates the true mean. 
