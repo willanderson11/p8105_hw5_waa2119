@@ -9,6 +9,7 @@ output: github_document
 ```{r, message = FALSE, warning = FALSE}
 
 library(tidyverse)
+library(lubridate)
 
 knitr::opts_chunk$set(
   fig.width = 6,
@@ -31,25 +32,32 @@ scale_fill_discrete = scale_fill_viridis_d
 
 First we read in the homicide data from the Washington Post
 
-```{r}
+```{r, warning = FALSE}
+
 homicide_data = 
   read_csv("homicide/homicide-data.csv", na = "") %>%
   
-  janitor::clean_names()
+  janitor::clean_names() %>%
+  
+  mutate(
+    reported_date = ymd(reported_date))
  
 
 head(homicide_data, 10)
 ```
 
-This data comprises 52,000 homicides in 50 large U.S. cities over the past decade. Using public records, the Washington Post acquired information about a decade of homicides including victim names, race, sex, age, location, and whether an arrest had been made. 
+This data comprises information about 52,000 homicides in 50 U.S. cities over the past decade. Using public records, the Washington Post acquired information about a decade of homicides including victim names, race, sex, age, location, and whether an arrest had been made. 
 
 The size of the dataset is `r dim(homicide_data)`
 
 The columns included are `r colnames(homicide_data)`
 
+The uid represents the identification number of each homicide within each city and the disposition variable represents whether an arrest has been made for the homicide. 
+
 Now we will create a city_state variable (e.g. “Baltimore, MD”) and then summarize within cities to obtain the total number of homicides and the number of unsolved homicides (those for which the disposition is “Closed without arrest” or “Open/No arrest”).
 
 ```{r}
+
 homicide_data_tidy = 
   
   homicide_data %>%
@@ -69,6 +77,7 @@ Now for the city of Baltimore, MD, we will use the prop.test function to estimat
 
 
 ```{r}
+
 homicide_baltimore = 
   
   homicide_data_tidy %>%
@@ -80,129 +89,190 @@ homicide_baltimore =
   
   unnest(prop_test) %>%
   
-  view
+  select(city_state, total_unsolved, total_homicides, estimate, conf.low, conf.high)
+
+head(homicide_baltimore, 10)
 
 ```
 
 
 Now we will run prop.test for each of the cities and extract both the proportion of unsolved homicides and the confidence interval for each.
 
-output = map(city_state, prop.test)
-output = map2(.x = input_1, .y = input_2, ~func(arg_1 = .x, arg_2 = .y))
 
-```{r}
+```{r, warning = FALSE}
+
 prop_tests_homicides = 
   
    homicide_data_tidy %>%
   
-  mutate(prop_test = map2(.x = total_unsolved, .y = total_homicides, ~prop.test(x = .x, n = .y))) %>%
-  mutate(prop_test_broom = map(prop_test, broom::tidy)) %>%
+  mutate(
+    prop_test = map2(.x = total_unsolved, .y = total_homicides, ~prop.test(x = .x, n = .y))) %>%
+  
+  mutate(
+    prop_test_broom = map(prop_test, broom::tidy)) %>%
+  
   unnest(prop_test_broom) %>%
-  select(city_state, total_unsolved, total_homicides, estimate, conf.low, conf.high) %>%
-  view
+  
+  select(city_state, total_unsolved, total_homicides, estimate, conf.low, conf.high)
+
+head(prop_tests_homicides, 10)
 ```
 
-Create a plot that shows the estimates and CIs for each city – check out geom_errorbar for a way to add error bars based on the upper and lower limits. Organize cities according to the proportion of unsolved homicides.
+Now we will create a plot that shows the estimates and confidence intervals for each city and organize the cities according to the proportion of unsolved homicides.
 
 ```{r}
+
   prop_tests_homicides =
+  
   prop_tests_homicides %>%
+  
     filter(!city_state %in% "Tulsa, AL")
 
-  ggplot(prop_tests_homicides, aes(x = reorder(city_state, estimate), y = estimate, color = city_state)) + 
+  ggplot(prop_tests_homicides, aes(x = reorder(city_state, estimate), y = estimate, group = city_state, color = city_state)) + 
     
     geom_point() + 
     
   geom_errorbar(aes(ymin = conf.low, ymax = conf.high)) +
     
+    theme(axis.text.x = element_text(angle = 90, vjust = 0.5), legend.position = "none") + 
+    
     labs(title = "Unsolved Homicide Proportions in US Cities", 
+         
          x = "", 
-         y = "Proportion", 
-         color = "Location") + 
+         
+         y = "Proportion")
     
-    theme(legend.position = "right") +
-    
-  scale_x_discrete(guide = guide_axis(check.overlap = TRUE))
 ```
-
 
 ## Problem 3
 
-n this problem, you will conduct a simulation to explore power in a one-sample t-test.
+Now we will conduct a simulation to explore power in a one-sample t-test.
 
-First set the following design elements:
+First we set the following design elements:
 
 Fix n=30
 Fix σ=5
-Set μ=0. Generate 5000 datasets from the model
+Set μ=0. 
+
+Then we will generate 5000 datasets from the model with parameters:
 
 x∼Normal[μ,σ]
 
-For each dataset, save μ^ and the p-value arising from a test of H:μ=0 using α=0.05. Hint: to obtain the estimate and p-value, use broom::tidy to clean the output of t.test.
+For each dataset, we will save μ_hat and the p-value arising from a test of H:μ=0 using α=0.05. 
 
 ```{r}
-n = 30
-sigma = 5
 
-norm_dist = function(n, mu) {
+n = 30
+
+t_dist = function(n, mu, sigma = 5) {
+  
   norm_data = tibble(x = rnorm(n, mean = mu, sd = sigma))
   
   broom::tidy(t.test(norm_data, alternative = "two.sided", conf.level = 0.95))
+  
 }
 
 t_test_results = 
+  
   expand_grid(
     sample_size = n,
     mu = 0:6,
     iter = 1:300) %>%
+  
   mutate(
-    t_test = map2(.x = sample_size, .y = mu, ~norm_dist(n = .x, mu = .y))) %>%
-  unnest(t_test) %>%
-  view
+    t_test = map2(.x = sample_size, .y = mu, ~t_dist(n = .x, mu = .y))) %>%
+  
+  unnest(t_test)
 
+head(t_test_results, 10)
 
 ```
 
-Make a plot showing the proportion of times the null was rejected (the power of the test) on the y axis and the true value of μ on the x axis. Describe the association between effect size and power.
+Now we will make a plot showing the proportion of times the null was rejected (the power of the test) on the y axis and the true value of μ on the x axis. 
 
 ```{r}
+
 t_test_results %>%
+  
   group_by(mu) %>%
+  
   filter(p.value < 0.05) %>%
+  
   summarize(proportion = n()) %>%
-  ggplot(aes(x = mu, y = proportion, color = mu, group = mu)) + geom_point() + labs(title = "Power vs different mean values", y = "Power value") + 
-  theme(legend.position = "none") + 
+  
+  ggplot(aes(x = mu, y = proportion, color = mu, group = mu)) +
+  
+  geom_point() + 
+  
+  labs(title = "Power vs different mean values", 
+       y = "Power value",
+       
+       x = "True mu") +
+  
+  theme(legend.position = "none") +
+  
   scale_x_continuous(breaks = 0:6)
 ```
 
-When effect size increases, so does the power of the test as there is a strong relationship between the two variables then the probability of correctly rejecting the null hypothesis increases as there is an association between the variables. We see this is true from the graph as the effect size increases the power also increases. This makes sense as the difference in means is increasing with increasing mu which means there is more likely to be a true effect and a rejection of the null hypothesis, which means a higher power value. 
+When effect size increases, so does the power of the test as there is a strong relationship between the two variable which causes the probability of correctly rejecting the null hypothesis to increase as there is a likely association between the variables. 
 
-Make a plot showing the average estimate of μ^ on the y axis and the true value of μ on the x axis. 
+We see this is true from the graph as the magnitude of the difference between the mean and the null hypothesis increases, the power also increases. This makes sense since the null hypothesis is mu = 0 and the difference in means is increasing with increasing mu which means there is more likely to be a true difference and a rejection of the null hypothesis, which is equivalent to a higher power value. 
+
+Now we will make a plot showing the average estimate of μ_hat on the y axis and the true value of μ on the x axis. 
 
 ```{r}
-t_test_results %>%
-  group_by(mu) %>%
-  summarize(mean_mu_hat = mean(estimate)) %>%
-  ggplot(aes(x = mu, y = mean_mu_hat, group = mu, color = mu)) + geom_point() + 
-  theme(legend.position = "none") + 
-  labs(title = "Estimated mu vs True mu", 
-       x = "True mu", y = "Estimated mu") + scale_x_continuous(breaks = 0:6) + 
-  scale_y_continuous(breaks = 0:6)
 
+t_test_results %>%
+  
+  group_by(mu) %>%
+  
+  summarize(mean_mu_hat = mean(estimate)) %>%
+  
+  ggplot(aes(x = mu, y = mean_mu_hat, group = mu, color = mu)) + 
+  
+  geom_point() + 
+  
+  theme(legend.position = "none") +
+  
+  labs(title = "Estimated mu vs True mu",
+       
+       x = "True mu",
+       
+       y = "Estimated mu") +
+  
+  scale_x_continuous(breaks = 0:6) +
+  
+  scale_y_continuous(breaks = 0:6)
   
 ```
 
-Make a second plot (or overlay on the first) the average estimate of μ^ only in samples for which the null was rejected on the y axis and the true value of μ on the x axis. Is the sample average of μ^ across tests for which the null is rejected approximately equal to the true value of μ? Why or why not?
+Now we will make a second plot showing the average estimate of μ_hat only in samples for which the null was rejected on the y axis and the true value of μ on the x axis.
 
 ```{r}
+
 t_test_results %>%
+  
   group_by(mu) %>%
+  
   filter(p.value < 0.05) %>%
+  
   summarize(mean_mu_hat = mean(estimate)) %>%
-    ggplot(aes(x = mu, y = mean_mu_hat, group = mu, color = mu)) + geom_point() + 
-  theme(legend.position = "none") + 
-  labs(title = "Estimated mu vs True mu when null is rejected", 
-       x = "True mu", y = "Estimated mu") + scale_x_continuous(breaks = 0:6)
+  
+    ggplot(aes(x = mu, y = mean_mu_hat, group = mu, color = mu)) + 
+  
+  geom_point() + 
+  
+  theme(legend.position = "none") +
+  
+  labs(title = "Estimated mu vs True mu when null is rejected",
+       
+       x = "True mu", 
+       
+       y = "Estimated mu") +
+  
+  scale_x_continuous(breaks = 0:6) +
+  
+  scale_y_continuous(breaks = 0:6)
 ```
 
-The average estimate of mu_hat across tests for which the null is rejected is only approximately equal to the true value of mu when the effect size becomes large as we see in the graph that the estimate models the true mean for mu = 4, 5, and 6 which shows that the effect size needs to be large enough and thus the power of the test be large enough for the null to be rejected enough times so that the estimate accurately approximates the true mean. 
+The average estimate of mu_hat across tests for which the null is rejected is only approximately equal to the true value of mu when the effect size becomes large as we see in the graph that the estimate approximates the true mean for mu = 4, 5, and 6 which shows that the effect size needs to be large enough and thus the power of the test be large enough for the null to be accurately rejected so that the estimate accurately approximates the true mean. 
